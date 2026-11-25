@@ -266,6 +266,20 @@
       errGeneric: "Qualcosa è andato storto. Riprova.",
     },
   };
+  I18N.ca = {
+    tagline: "Fotografia un peix i descobreix-ne el nom i algunes curiositats.", identify: "Identifica un peix",
+    examples: "Fotos sota l'aigua, d'aquari, del mercat…", take: "Fes una foto", choose: "Tria una foto",
+    newPhoto: "Nova foto", pickAnother: "Tria'n una altra",
+    disclaimer: "La identificació amb IA pot fallar. No t'hi refiïs per saber si un peix és segur de tocar o de menjar.",
+    status: ["Mirant amb atenció…", "Revisant aletes i colors…", "Comparant espècies…", "Gairebé a punt…"],
+    alsoCalled: "També anomenat", confidence: { high: "Confiança alta", medium: "Confiança mitjana", low: "Confiança baixa" },
+    labels: { Appearance: "Aparença", Habitat: "Hàbitat", Behavior: "Comportament", Diet: "Dieta", Size: "Mida", Safety: "Seguretat" },
+    noFish: "No es veu cap peix 🤔", retry: "Torna-ho a provar",
+    errBusy: "L'expert en peixos està ocupat. Torna-ho a provar d'aquí a un minut.",
+    errLimit: "S'ha arribat al límit gratuït d'avui. Torna-ho a provar més tard.", errPhoto: "Ho sentim, no s'ha pogut analitzar aquesta foto.",
+    errRead: "No s'ha pogut llegir la imatge. Prova amb una altra foto.", errOffline: "Sense connexió. Revisa la cobertura i torna-ho a provar.",
+    errGeneric: "Alguna cosa ha anat malament. Torna-ho a provar.",
+  };
   const LANG = (navigator.languages?.[0] || navigator.language || "en").replace("_", "-");
   const T = I18N[LANG.split("-")[0].toLowerCase()] || I18N.en;
   document.documentElement.lang = LANG;
