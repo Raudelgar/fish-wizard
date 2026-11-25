@@ -28,5 +28,6 @@ GEMINI_API_KEY=... npx vercel dev   # or ANTHROPIC_API_KEY=...
 ## Roadmap
 
 - v1: photos ✅
-- v2: video (sample a few frames and send them as images)
-- v3: iOS Share Sheet / Shortcut, so you can tap Share in Photos and get the answer as a bubble
+- Underwater redesign, crop step, saveable fish card (share sheet → Save Image), replies in the phone's language ✅
+- Videos: the gallery shows videos and the page identifies a still frame from the clip ✅
+- Next: iOS Share Sheet / Shortcut, so you can tap Share in Photos and get the answer as a bubble

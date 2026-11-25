@@ -29,10 +29,11 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["label", "text"],
+        required: ["label", "text", "short"],
         properties: {
           label: { type: "string", enum: ["Appearance", "Habitat", "Behavior", "Diet", "Size", "Safety"] },
           text: { type: "string" },
+          short: { type: "string", description: "The same fact in 2-5 words, for a small card (e.g. 'Red Sea reefs, 1-20 m')." },
         },
       },
     },
@@ -58,7 +59,7 @@ function languageInstruction(lang) {
     const regionName = region && region.length === 2 ? new Intl.DisplayNames(["en"], { type: "region" }).of(region.toUpperCase()) : "";
     name = regionName ? `${langName} (${regionName})` : langName;
   } catch {}
-  return `\nReply language: ${name} [${lang}]. Write summary, facts[].text, note and other_names in ${name}.
+  return `\nReply language: ${name} [${lang}]. Write summary, facts[].text, facts[].short, note and other_names in ${name}.
 For common_name only: use the ${name} name if you are sure it is the established name for this exact species; if not, use the English name there (never invent a name). Even then, every other text field stays in ${name}.
 Keep scientific_name in Latin, and keep the "label" and "confidence" values exactly as the English enum values.`;
 }
