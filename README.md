@@ -3,20 +3,26 @@
 Snap or upload a photo of a fish and get a quick ID card: common name, scientific name, and a few key facts (appearance, habitat, behavior, diet).
 
 - `public/index.html`: mobile-first page. It resizes the photo in the browser (which also converts iPhone HEIC to JPEG) and shows the result as a card.
-- `api/identify.js`: Vercel serverless function that sends the image to Claude and returns structured JSON.
+- `api/identify.js`: Vercel serverless function that sends the image to an AI model and returns structured JSON. It uses **Gemini** when `GEMINI_API_KEY` is set, otherwise **Claude**.
 
-## Deploy (Vercel, about 2 minutes)
+## Deploy for free (Vercel + Gemini free tier, about 2 minutes)
 
-1. Get an API key at <https://console.anthropic.com>.
-2. On <https://vercel.com/new>, import this GitHub repo. No build settings are needed.
-3. Under **Environment Variables**, add `ANTHROPIC_API_KEY`.
+1. Get a free Gemini API key at <https://aistudio.google.com/apikey> (sign in with Google; no credit card).
+2. On <https://vercel.com/new>, sign in with GitHub (Hobby plan is free) and import this repo. No build settings are needed.
+3. Under **Environment Variables**, add `GEMINI_API_KEY`.
 4. Click **Deploy** and open the URL on your phone. In Safari, tap Share → **Add to Home Screen** to get an app-like icon.
+
+Notes on the free tier: it has daily request limits (plenty for personal use), and Google may use free-tier inputs to improve its products. Optional: set `GEMINI_MODEL` to pick a specific model (default `gemini-flash-latest`).
+
+### Using Claude instead
+
+Set `ANTHROPIC_API_KEY` (from <https://console.anthropic.com>) and leave `GEMINI_API_KEY` unset. This is paid per use, roughly a cent or less per photo.
 
 ## Run locally
 
 ```bash
 npm install
-ANTHROPIC_API_KEY=sk-ant-... npx vercel dev
+GEMINI_API_KEY=... npx vercel dev   # or ANTHROPIC_API_KEY=...
 ```
 
 ## Roadmap

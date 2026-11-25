@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+// Provider: Gemini (free tier) when GEMINI_API_KEY is set, otherwise Claude (ANTHROPIC_API_KEY).
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+let anthropic;
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_BASE64_CHARS = 6_000_000; // ~4.5 MB of image data (Vercel body limit is 4.5 MB)
@@ -53,34 +55,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await client.beta.messages.create({
-      model: "claude-opus-5-5",
-      max_tokens: 4000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: SCHEMA },
-      },
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-            { type: "text", text: PROMPT },
-          ],
-        },
-      ],
-    });
-
-    if (response.stop_reason === "refusal") {
-      return res.status(422).json({ error: "Sorry, this photo couldn't be analyzed." });
-    }
-
-    const text = response.content.find((b) => b.type === "text")?.text;
-    if (!text) return res.status(502).json({ error: "No answer from the model" });
-
-    return res.status(200).json(JSON.parse(text));
+    const result = process.env.GEMINI_API_KEY
+      ? await askGemini(image, mediaType)
+      : await askClaude(image, mediaType);
+    return res.status(result.status).json(result.body);
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       return res.status(429).json({ error: "Too many requests, try again in a moment." });
@@ -89,7 +67,84 @@ export default async function handler(req, res) {
       console.error("Anthropic API error", err.status, err.message);
       return res.status(502).json({ error: "The fish expert is unavailable right now." });
     }
+    if (err instanceof ProviderError) {
+      console.error(err.message);
+      return res.status(err.status).json({ error: err.userMessage });
+    }
     console.error(err);
     return res.status(500).json({ error: "Something went wrong." });
   }
+}
+
+class ProviderError extends Error {
+  constructor(status, userMessage, detail) {
+    super(detail || userMessage);
+    this.status = status;
+    this.userMessage = userMessage;
+  }
+}
+
+async function askClaude(image, mediaType) {
+  anthropic ??= new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
+  const response = await anthropic.beta.messages.create({
+    model: "claude-opus-5-5",
+    max_tokens: 4000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    output_config: {
+      effort: "low",
+      format: { type: "json_schema", schema: SCHEMA },
+    },
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
+          { type: "text", text: PROMPT },
+        ],
+      },
+    ],
+  });
+
+  if (response.stop_reason === "refusal") {
+    return { status: 422, body: { error: "Sorry, this photo couldn't be analyzed." } };
+  }
+  const text = response.content.find((b) => b.type === "text")?.text;
+  if (!text) return { status: 502, body: { error: "No answer from the model" } };
+  return { status: 200, body: JSON.parse(text) };
+}
+
+async function askGemini(image, mediaType) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ inline_data: { mime_type: mediaType, data: image } }, { text: PROMPT }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseJsonSchema: SCHEMA,
+      },
+    }),
+  });
+
+  if (r.status === 429) {
+    throw new ProviderError(429, "Free daily limit reached. Try again later.", "Gemini rate limit (429)");
+  }
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    throw new ProviderError(502, "The fish expert is unavailable right now.", `Gemini error ${r.status}: ${detail.slice(0, 500)}`);
+  }
+
+  const data = await r.json();
+  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("");
+  if (!text) {
+    return { status: 422, body: { error: "Sorry, this photo couldn't be analyzed." } };
+  }
+  return { status: 200, body: JSON.parse(text) };
 }
