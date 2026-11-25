@@ -1,7 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 // Provider: Gemini (free tier) when GEMINI_API_KEY is set, otherwise Claude (ANTHROPIC_API_KEY).
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+// Tried in order; on "busy" (503) or "quota used up" (429) we move to the next one.
+const GEMINI_MODELS = (process.env.GEMINI_MODELS || "gemini-flash-latest,gemini-flash-lite-latest,gemini-3.1-flash-lite")
+  .split(",").map((m) => m.trim()).filter(Boolean);
+const GEMINI_DEADLINE_MS = 50_000; // stay under the 60 s function limit
 let anthropic;
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -115,36 +118,66 @@ async function askClaude(image, mediaType) {
 }
 
 async function askGemini(image, mediaType) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ inline_data: { mime_type: mediaType, data: image } }, { text: PROMPT }],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseJsonSchema: SCHEMA,
-      },
-    }),
-  });
+  const started = Date.now();
+  let lastStatus = 0;
 
-  if (r.status === 429) {
-    throw new ProviderError(429, "Free daily limit reached. Try again later.", "Gemini rate limit (429)");
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (Date.now() - started > GEMINI_DEADLINE_MS) break;
+      const r = await callGemini(model, image, mediaType, GEMINI_DEADLINE_MS - (Date.now() - started));
+      if (r.ok) return r.result;
+      lastStatus = r.status;
+      console.warn(`Gemini ${model} failed (${r.status}): ${r.detail}`);
+      if (r.status === 503 || r.status === 500) {
+        await new Promise((ok) => setTimeout(ok, 800)); // brief pause, then retry once
+        continue;
+      }
+      break; // 429 / 404 / timeout: try the next model
+    }
   }
+
+  if (lastStatus === 429) throw new ProviderError(429, "Free daily limit reached. Try again later.");
+  throw new ProviderError(503, "The fish expert is busy right now. Please try again in a minute.");
+}
+
+async function callGemini(model, image, mediaType, timeoutMs) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  let r;
+  try {
+    r = await fetch(url, {
+      method: "POST",
+      signal: AbortSignal.timeout(Math.max(timeoutMs, 1000)),
+      headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ inline_data: { mime_type: mediaType, data: image } }, { text: PROMPT }],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseJsonSchema: SCHEMA,
+        },
+      }),
+    });
+  } catch (err) {
+    return { ok: false, status: 0, detail: err.name === "TimeoutError" ? "timeout" : err.message };
+  }
+
   if (!r.ok) {
-    const detail = await r.text().catch(() => "");
-    throw new ProviderError(502, "The fish expert is unavailable right now.", `Gemini error ${r.status}: ${detail.slice(0, 500)}`);
+    const detail = (await r.text().catch(() => "")).slice(0, 300);
+    if (r.status === 400 || r.status === 403) {
+      // Bad key or bad request: switching models won't help.
+      throw new ProviderError(502, "The fish expert is unavailable right now.", `Gemini ${r.status}: ${detail}`);
+    }
+    return { ok: false, status: r.status, detail };
   }
 
   const data = await r.json();
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("");
   if (!text) {
-    return { status: 422, body: { error: "Sorry, this photo couldn't be analyzed." } };
+    return { ok: true, result: { status: 422, body: { error: "Sorry, this photo couldn't be analyzed." } } };
   }
-  return { status: 200, body: JSON.parse(text) };
+  return { ok: true, result: { status: 200, body: JSON.parse(text) } };
 }

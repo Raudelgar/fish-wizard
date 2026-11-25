@@ -12,7 +12,7 @@ Snap or upload a photo of a fish and get a quick ID card: common name, scientifi
 3. Under **Environment Variables**, add `GEMINI_API_KEY`.
 4. Click **Deploy** and open the URL on your phone. In Safari, tap Share → **Add to Home Screen** to get an app-like icon.
 
-Notes on the free tier: it has daily request limits (plenty for personal use), and Google may use free-tier inputs to improve its products. Optional: set `GEMINI_MODEL` to pick a specific model (default `gemini-flash-latest`).
+Notes on the free tier: it has daily request limits (plenty for personal use), and Google may use free-tier inputs to improve its products. If a model is busy or out of free quota, the app automatically tries the next one (`gemini-flash-latest`, then `gemini-flash-lite-latest`, then `gemini-3.1-flash-lite`). Optional: override the list with `GEMINI_MODELS` (comma-separated).
 
 ### Using Claude instead
 
