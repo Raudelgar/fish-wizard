@@ -15,11 +15,12 @@ const MAX_BASE64_CHARS = 6_000_000; // ~4.5 MB of image data (Vercel body limit 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["found", "common_name", "scientific_name", "other_names", "confidence", "summary", "facts", "note"],
+  required: ["found", "english_name", "scientific_name", "common_name", "other_names", "confidence", "summary", "facts", "note"],
   properties: {
     found: { type: "boolean", description: "true if at least one fish is visible" },
-    common_name: { type: "string" },
+    english_name: { type: "string", description: "Decide the species first: its English common name." },
     scientific_name: { type: "string" },
+    common_name: { type: "string", description: "Common name in the reply language." },
     other_names: { type: "array", items: { type: "string" } },
     confidence: { type: "string", enum: ["high", "medium", "low"] },
     summary: { type: "string", description: "One or two sentences, like a friendly guide." },
@@ -40,10 +41,27 @@ const SCHEMA = {
 };
 
 const PROMPT = `You are a marine biologist helping a diver or snorkeler identify fish in their photo.
-Identify the fish species shown. If there are several species, describe the most prominent one and mention the others in "note".
+Identify the fish species shown. Decide the species first (english_name and scientific_name), based on the visible markings, before writing anything else. If there are several species, describe the most prominent one and mention the others in "note".
 Write "summary" in one or two short sentences. Give 3-5 "facts" (Appearance, Habitat, Behavior, Diet, and Size or Safety when relevant), each one short sentence, and tie a fact to what is visible in the photo when you can (e.g. "swimming in pairs, as in your photo").
 If you are not sure, give your best guess with confidence "low" and name likely look-alikes in "note".
 If no fish is visible, set found=false, leave the name fields empty, and explain briefly in "summary".`;
+
+const LANG_RE = /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8}){0,3}$/;
+
+// Turns a phone locale like "es-MX" into an instruction such as "Spanish (Mexico)".
+function languageInstruction(lang) {
+  if (typeof lang !== "string" || !LANG_RE.test(lang) || /^en\b/i.test(lang)) return "";
+  let name = lang;
+  try {
+    const [base, region] = lang.split("-");
+    const langName = new Intl.DisplayNames(["en"], { type: "language" }).of(base);
+    const regionName = region && region.length === 2 ? new Intl.DisplayNames(["en"], { type: "region" }).of(region.toUpperCase()) : "";
+    name = regionName ? `${langName} (${regionName})` : langName;
+  } catch {}
+  return `\nReply language: ${name} [${lang}]. Write summary, facts[].text, note and other_names in ${name}.
+For common_name only: use the ${name} name if you are sure it is the established name for this exact species; if not, use the English name there (never invent a name). Even then, every other text field stays in ${name}.
+Keep scientific_name in Latin, and keep the "label" and "confidence" values exactly as the English enum values.`;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -51,7 +69,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Use POST" });
   }
 
-  const { image, mediaType } = req.body ?? {};
+  const { image, mediaType, lang } = req.body ?? {};
+  const prompt = PROMPT + languageInstruction(lang);
   if (typeof image !== "string" || !image || !ALLOWED_TYPES.has(mediaType)) {
     return res.status(400).json({ error: "Send { image: <base64>, mediaType: 'image/jpeg' }" });
   }
@@ -61,8 +80,8 @@ export default async function handler(req, res) {
 
   try {
     const result = process.env.GEMINI_API_KEY
-      ? await askGemini(image, mediaType)
-      : await askClaude(image, mediaType);
+      ? await askGemini(image, mediaType, prompt)
+      : await askClaude(image, mediaType, prompt);
     return res.status(result.status).json(result.body);
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
@@ -89,7 +108,7 @@ class ProviderError extends Error {
   }
 }
 
-async function askClaude(image, mediaType) {
+async function askClaude(image, mediaType, prompt) {
   anthropic ??= new Anthropic(); // reads ANTHROPIC_API_KEY from the environment
   const response = await anthropic.beta.messages.create({
     model: "claude-opus-5-5",
@@ -105,7 +124,7 @@ async function askClaude(image, mediaType) {
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-          { type: "text", text: PROMPT },
+          { type: "text", text: prompt },
         ],
       },
     ],
@@ -119,7 +138,7 @@ async function askClaude(image, mediaType) {
   return { status: 200, body: JSON.parse(text) };
 }
 
-async function askGemini(image, mediaType) {
+async function askGemini(image, mediaType, prompt) {
   const started = Date.now();
   let statuses = [];
 
@@ -129,7 +148,7 @@ async function askGemini(image, mediaType) {
     if (left < 3000) break;
     const stop = new AbortController();
     const attempts = GEMINI_MODELS.map(async (model) => {
-      const r = await callGemini(model, image, mediaType, Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, left), stop.signal);
+      const r = await callGemini(model, image, mediaType, prompt, Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, left), stop.signal);
       if (!r.ok) {
         if (r.detail !== "cancelled") console.warn(`Gemini ${model} failed (${r.status}): ${r.detail}`);
         throw r;
@@ -156,7 +175,7 @@ async function askGemini(image, mediaType) {
   throw new ProviderError(503, "The fish expert is busy right now. Please try again in a minute.");
 }
 
-async function callGemini(model, image, mediaType, timeoutMs, cancel) {
+async function callGemini(model, image, mediaType, prompt, timeoutMs, cancel) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   let r;
   try {
@@ -168,7 +187,7 @@ async function callGemini(model, image, mediaType, timeoutMs, cancel) {
         contents: [
           {
             role: "user",
-            parts: [{ inline_data: { mime_type: mediaType, data: image } }, { text: PROMPT }],
+            parts: [{ inline_data: { mime_type: mediaType, data: image } }, { text: prompt }],
           },
         ],
         generationConfig: {

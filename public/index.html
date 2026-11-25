@@ -142,17 +142,17 @@
     <div class="logo">🐠</div>
     <h1>Fish Wizard</h1>
   </header>
-  <p class="tagline">Snap a fish, get its name and a few fun facts.</p>
+  <p class="tagline" data-i18n="tagline">Snap a fish, get its name and a few fun facts.</p>
 
   <section id="empty">
     <label class="drop" for="library">
       <div class="big">🐟</div>
-      <strong>Identify a fish</strong>
-      <span>Underwater shots, aquarium photos, market catch…</span>
+      <strong data-i18n="identify">Identify a fish</strong>
+      <span data-i18n="examples">Underwater shots, aquarium photos, market catch…</span>
     </label>
     <div class="actions">
-      <label class="btn primary" for="camera">📷 Take photo</label>
-      <label class="btn" for="library">🖼️ Choose photo</label>
+      <label class="btn primary" for="camera">📷 <span data-i18n="take">Take photo</span></label>
+      <label class="btn" for="library">🖼️ <span data-i18n="choose">Choose photo</span></label>
     </div>
   </section>
 
@@ -164,22 +164,113 @@
     </div>
     <div id="card" class="card" aria-live="polite"></div>
     <div class="actions again" id="again">
-      <label class="btn primary" for="camera">📷 New photo</label>
-      <label class="btn" for="library">🖼️ Pick another</label>
+      <label class="btn primary" for="camera">📷 <span data-i18n="newPhoto">New photo</span></label>
+      <label class="btn" for="library">🖼️ <span data-i18n="pickAnother">Pick another</span></label>
     </div>
   </section>
 
   <input id="camera" type="file" accept="image/*" capture="environment" />
   <input id="library" type="file" accept="image/*" />
 
-  <footer>AI identification can be wrong. Don't rely on it to judge whether a fish is safe to touch or eat.</footer>
+  <footer data-i18n="disclaimer">AI identification can be wrong. Don't rely on it to judge whether a fish is safe to touch or eat.</footer>
 </main>
 
 <script>
   const $ = (id) => document.getElementById(id);
   const stage = $("stage"), card = $("card"), statusEl = $("status");
   const ICONS = { Appearance: "🎨", Habitat: "🌊", Behavior: "🐟", Diet: "🦐", Size: "📏", Safety: "⚠️" };
-  const STATUS = ["Looking closely…", "Checking fins and colors…", "Comparing species…", "Almost there…"];
+  // ---- Language: follow the phone's settings ----
+  const I18N = {
+    en: {
+      tagline: "Snap a fish, get its name and a few fun facts.", identify: "Identify a fish",
+      examples: "Underwater shots, aquarium photos, market catch…", take: "Take photo", choose: "Choose photo",
+      newPhoto: "New photo", pickAnother: "Pick another",
+      disclaimer: "AI identification can be wrong. Don't rely on it to judge whether a fish is safe to touch or eat.",
+      status: ["Looking closely…", "Checking fins and colors…", "Comparing species…", "Almost there…"],
+      alsoCalled: "Also called", confidence: { high: "High confidence", medium: "Medium confidence", low: "Low confidence" },
+      labels: { Appearance: "Appearance", Habitat: "Habitat", Behavior: "Behavior", Diet: "Diet", Size: "Size", Safety: "Safety" },
+      noFish: "No fish spotted 🤔", retry: "Try again",
+      errBusy: "The fish expert is busy right now. Please try again in a minute.",
+      errLimit: "Free daily limit reached. Try again later.", errPhoto: "Sorry, this photo couldn't be analyzed.",
+      errRead: "Couldn't read that image. Try another photo.", errOffline: "No connection. Check your signal and try again.",
+      errGeneric: "Something went wrong. Please try again.",
+    },
+    es: {
+      tagline: "Fotografía un pez y descubre su nombre y algunos datos curiosos.", identify: "Identifica un pez",
+      examples: "Fotos bajo el agua, de acuario, del mercado…", take: "Tomar foto", choose: "Elegir foto",
+      newPhoto: "Nueva foto", pickAnother: "Elegir otra",
+      disclaimer: "La identificación con IA puede fallar. No te fíes de ella para saber si un pez es seguro de tocar o comer.",
+      status: ["Mirando con atención…", "Revisando aletas y colores…", "Comparando especies…", "Casi listo…"],
+      alsoCalled: "También llamado", confidence: { high: "Confianza alta", medium: "Confianza media", low: "Confianza baja" },
+      labels: { Appearance: "Apariencia", Habitat: "Hábitat", Behavior: "Comportamiento", Diet: "Dieta", Size: "Tamaño", Safety: "Seguridad" },
+      noFish: "No se ve ningún pez 🤔", retry: "Reintentar",
+      errBusy: "El experto en peces está ocupado. Inténtalo de nuevo en un minuto.",
+      errLimit: "Se alcanzó el límite gratuito de hoy. Inténtalo más tarde.", errPhoto: "Lo sentimos, no se pudo analizar esta foto.",
+      errRead: "No se pudo leer la imagen. Prueba con otra foto.", errOffline: "Sin conexión. Revisa tu señal e inténtalo de nuevo.",
+      errGeneric: "Algo salió mal. Inténtalo de nuevo.",
+    },
+    pt: {
+      tagline: "Fotografe um peixe e descubra o nome e algumas curiosidades.", identify: "Identifique um peixe",
+      examples: "Fotos subaquáticas, de aquário, da feira…", take: "Tirar foto", choose: "Escolher foto",
+      newPhoto: "Nova foto", pickAnother: "Escolher outra",
+      disclaimer: "A identificação por IA pode errar. Não confie nela para saber se um peixe é seguro para tocar ou comer.",
+      status: ["Olhando com atenção…", "Verificando nadadeiras e cores…", "Comparando espécies…", "Quase lá…"],
+      alsoCalled: "Também chamado de", confidence: { high: "Confiança alta", medium: "Confiança média", low: "Confiança baixa" },
+      labels: { Appearance: "Aparência", Habitat: "Habitat", Behavior: "Comportamento", Diet: "Dieta", Size: "Tamanho", Safety: "Segurança" },
+      noFish: "Nenhum peixe encontrado 🤔", retry: "Tentar de novo",
+      errBusy: "O especialista em peixes está ocupado. Tente de novo em um minuto.",
+      errLimit: "Limite gratuito de hoje atingido. Tente mais tarde.", errPhoto: "Desculpe, não foi possível analisar esta foto.",
+      errRead: "Não foi possível ler a imagem. Tente outra foto.", errOffline: "Sem conexão. Verifique o sinal e tente de novo.",
+      errGeneric: "Algo deu errado. Tente de novo.",
+    },
+    fr: {
+      tagline: "Photographiez un poisson et découvrez son nom et quelques anecdotes.", identify: "Identifier un poisson",
+      examples: "Photos sous-marines, d'aquarium, du marché…", take: "Prendre une photo", choose: "Choisir une photo",
+      newPhoto: "Nouvelle photo", pickAnother: "En choisir une autre",
+      disclaimer: "L'identification par IA peut se tromper. Ne vous y fiez pas pour savoir si un poisson peut être touché ou mangé.",
+      status: ["Examen attentif…", "Analyse des nageoires et des couleurs…", "Comparaison des espèces…", "Presque fini…"],
+      alsoCalled: "Aussi appelé", confidence: { high: "Confiance élevée", medium: "Confiance moyenne", low: "Confiance faible" },
+      labels: { Appearance: "Apparence", Habitat: "Habitat", Behavior: "Comportement", Diet: "Alimentation", Size: "Taille", Safety: "Sécurité" },
+      noFish: "Aucun poisson repéré 🤔", retry: "Réessayer",
+      errBusy: "L'expert en poissons est occupé. Réessayez dans une minute.",
+      errLimit: "Limite gratuite du jour atteinte. Réessayez plus tard.", errPhoto: "Désolé, cette photo n'a pas pu être analysée.",
+      errRead: "Impossible de lire cette image. Essayez une autre photo.", errOffline: "Pas de connexion. Vérifiez votre réseau et réessayez.",
+      errGeneric: "Une erreur s'est produite. Réessayez.",
+    },
+    de: {
+      tagline: "Fotografiere einen Fisch und erfahre seinen Namen und spannende Fakten.", identify: "Fisch bestimmen",
+      examples: "Unterwasserfotos, Aquarium, Fischmarkt…", take: "Foto aufnehmen", choose: "Foto wählen",
+      newPhoto: "Neues Foto", pickAnother: "Anderes wählen",
+      disclaimer: "KI-Bestimmungen können falsch sein. Verlass dich nicht darauf, ob ein Fisch sicher zum Anfassen oder Essen ist.",
+      status: ["Genau hinsehen…", "Flossen und Farben prüfen…", "Arten vergleichen…", "Fast fertig…"],
+      alsoCalled: "Auch genannt", confidence: { high: "Hohe Sicherheit", medium: "Mittlere Sicherheit", low: "Geringe Sicherheit" },
+      labels: { Appearance: "Aussehen", Habitat: "Lebensraum", Behavior: "Verhalten", Diet: "Nahrung", Size: "Größe", Safety: "Sicherheit" },
+      noFish: "Kein Fisch entdeckt 🤔", retry: "Erneut versuchen",
+      errBusy: "Der Fischexperte ist gerade beschäftigt. Versuch es in einer Minute noch einmal.",
+      errLimit: "Tägliches Gratislimit erreicht. Versuch es später.", errPhoto: "Dieses Foto konnte leider nicht analysiert werden.",
+      errRead: "Das Bild konnte nicht gelesen werden. Versuch ein anderes Foto.", errOffline: "Keine Verbindung. Prüfe dein Netz und versuch es erneut.",
+      errGeneric: "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
+    },
+    it: {
+      tagline: "Fotografa un pesce e scopri il suo nome e qualche curiosità.", identify: "Identifica un pesce",
+      examples: "Foto subacquee, d'acquario, del mercato…", take: "Scatta foto", choose: "Scegli foto",
+      newPhoto: "Nuova foto", pickAnother: "Scegline un'altra",
+      disclaimer: "L'identificazione con l'IA può sbagliare. Non affidarti a essa per capire se un pesce è sicuro da toccare o mangiare.",
+      status: ["Osservo con attenzione…", "Controllo pinne e colori…", "Confronto le specie…", "Quasi fatto…"],
+      alsoCalled: "Chiamato anche", confidence: { high: "Affidabilità alta", medium: "Affidabilità media", low: "Affidabilità bassa" },
+      labels: { Appearance: "Aspetto", Habitat: "Habitat", Behavior: "Comportamento", Diet: "Dieta", Size: "Dimensioni", Safety: "Sicurezza" },
+      noFish: "Nessun pesce trovato 🤔", retry: "Riprova",
+      errBusy: "L'esperto di pesci è occupato. Riprova tra un minuto.",
+      errLimit: "Limite gratuito giornaliero raggiunto. Riprova più tardi.", errPhoto: "Spiacenti, non è stato possibile analizzare questa foto.",
+      errRead: "Impossibile leggere l'immagine. Prova un'altra foto.", errOffline: "Nessuna connessione. Controlla il segnale e riprova.",
+      errGeneric: "Qualcosa è andato storto. Riprova.",
+    },
+  };
+  const LANG = (navigator.languages?.[0] || navigator.language || "en").replace("_", "-");
+  const T = I18N[LANG.split("-")[0].toLowerCase()] || I18N.en;
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = T[el.dataset.i18n]; });
+  const STATUS = T.status;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   let lastImage = null, statusTimer = null;
@@ -206,7 +297,7 @@
       const img = await new Promise((resolve, reject) => {
         const i = new Image();
         i.onload = () => resolve(i);
-        i.onerror = () => reject(new Error("Couldn't read that image. Try another photo."));
+        i.onerror = () => reject(new Error(T.errRead));
         i.src = url;
       });
       const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
@@ -255,15 +346,18 @@
       const r = await fetch("/api/identify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: lastImage.base64, mediaType: "image/jpeg" }),
+        body: JSON.stringify({ image: lastImage.base64, mediaType: "image/jpeg", lang: LANG }),
       });
       const data = await r.json().catch(() => null);
-      if (!r.ok || !data) throw new Error(data?.error || "Something went wrong. Please try again.");
+      if (!r.ok || !data) {
+        throw new Error(r.status === 429 ? T.errLimit : r.status === 422 ? T.errPhoto
+          : r.status === 502 || r.status === 503 ? T.errBusy : T.errGeneric);
+      }
       setScanning(false);
       render(data);
     } catch (err) {
       setScanning(false);
-      showError(err.message === "Failed to fetch" ? "No connection. Check your signal and try again." : err.message, true);
+      showError(err instanceof TypeError ? T.errOffline : err.message, true);
     }
   }
 
@@ -275,24 +369,26 @@
   }
 
   function showError(msg, canRetry) {
-    showCard(`<h2>😕 ${esc(msg)}</h2>${canRetry ? '<button class="btn" id="retry">↻ Try again</button>' : ""}`, true);
+    showCard(`<h2>😕 ${esc(msg)}</h2>${canRetry ? '<button class="btn" id="retry">↻ ${esc(T.retry)}</button>' : ""}`, true);
     $("retry")?.addEventListener("click", identify);
   }
 
   function render(d) {
     if (!d.found) {
-      showCard(`<h2>No fish spotted 🤔</h2><p class="summary">${esc(d.summary)}</p>`);
+      showCard(`<h2>${esc(T.noFish)}</h2><p class="summary">${esc(d.summary)}</p>`);
       return;
     }
-    const aka = d.other_names?.length ? `<div class="aka">Also called ${d.other_names.map(esc).join(", ")}</div>` : "";
+    // If the model fell back to the Latin name, show the English name as the title instead of repeating it.
+    if (d.english_name && (!d.common_name || d.common_name === d.scientific_name)) d.common_name = d.english_name;
+    const aka = d.other_names?.length ? `<div class="aka">${esc(T.alsoCalled)} ${d.other_names.map(esc).join(", ")}</div>` : "";
     const facts = (d.facts || []).map((f) => `
       <li><span class="ico">${ICONS[f.label] || "🐠"}</span>
-        <div><b>${esc(f.label)}</b>${esc(f.text)}</div></li>`).join("");
+        <div><b>${esc(T.labels[f.label] || f.label)}</b>${esc(f.text)}</div></li>`).join("");
     showCard(`
       <h2>${esc(d.common_name)}</h2>
       <div class="sci">${esc(d.scientific_name)}</div>
       ${aka}
-      <div class="meta"><span class="pill ${esc(d.confidence)}">${esc(d.confidence)} confidence</span></div>
+      <div class="meta"><span class="pill ${esc(d.confidence)}">${esc(T.confidence[d.confidence] || d.confidence)}</span></div>
       <p class="summary">${esc(d.summary)}</p>
       <ul class="facts">${facts}</ul>
       ${d.note ? `<div class="note">💡 ${esc(d.note)}</div>` : ""}
