@@ -1,10 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 // Provider: Gemini (free tier) when GEMINI_API_KEY is set, otherwise Claude (ANTHROPIC_API_KEY).
-// Tried in order; on "busy" (503) or "quota used up" (429) we move to the next one.
-const GEMINI_MODELS = (process.env.GEMINI_MODELS || "gemini-flash-latest,gemini-flash-lite-latest,gemini-3.1-flash-lite")
+// Fast models are asked at the same time; the first good answer wins and the others are cancelled.
+// (The free "gemini-flash-latest" often hangs under load, so it is not in the default list.)
+const GEMINI_MODELS = (process.env.GEMINI_MODELS || "gemini-flash-lite-latest,gemini-3.5-flash-lite,gemini-3-flash-preview")
   .split(",").map((m) => m.trim()).filter(Boolean);
-const GEMINI_DEADLINE_MS = 50_000; // stay under the 60 s function limit
+const GEMINI_ATTEMPT_TIMEOUT_MS = 15_000;
+const GEMINI_DEADLINE_MS = 40_000;
 let anthropic;
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -119,34 +121,48 @@ async function askClaude(image, mediaType) {
 
 async function askGemini(image, mediaType) {
   const started = Date.now();
-  let lastStatus = 0;
+  let statuses = [];
 
-  for (const model of GEMINI_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (Date.now() - started > GEMINI_DEADLINE_MS) break;
-      const r = await callGemini(model, image, mediaType, GEMINI_DEADLINE_MS - (Date.now() - started));
-      if (r.ok) return r.result;
-      lastStatus = r.status;
-      console.warn(`Gemini ${model} failed (${r.status}): ${r.detail}`);
-      if (r.status === 503 || r.status === 500) {
-        await new Promise((ok) => setTimeout(ok, 800)); // brief pause, then retry once
-        continue;
+  // Up to two rounds: if every model is busy, wait a moment and race them again.
+  for (let round = 0; round < 2; round++) {
+    const left = GEMINI_DEADLINE_MS - (Date.now() - started);
+    if (left < 3000) break;
+    const stop = new AbortController();
+    const attempts = GEMINI_MODELS.map(async (model) => {
+      const r = await callGemini(model, image, mediaType, Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, left), stop.signal);
+      if (!r.ok) {
+        if (r.detail !== "cancelled") console.warn(`Gemini ${model} failed (${r.status}): ${r.detail}`);
+        throw r;
       }
-      break; // 429 / 404 / timeout: try the next model
+      console.log(`Gemini ${model} answered in ${Date.now() - started} ms`);
+      return r.result;
+    });
+    try {
+      const result = await Promise.any(attempts);
+      stop.abort(); // cancel the slower requests
+      return result;
+    } catch (err) {
+      const errors = err instanceof AggregateError ? err.errors : [err];
+      const fatal = errors.find((e) => e instanceof ProviderError);
+      if (fatal) throw fatal;
+      statuses = errors.map((e) => e.status);
+      await new Promise((ok) => setTimeout(ok, 1000));
     }
   }
 
-  if (lastStatus === 429) throw new ProviderError(429, "Free daily limit reached. Try again later.");
+  if (statuses.length && statuses.every((s) => s === 429)) {
+    throw new ProviderError(429, "Free daily limit reached. Try again later.");
+  }
   throw new ProviderError(503, "The fish expert is busy right now. Please try again in a minute.");
 }
 
-async function callGemini(model, image, mediaType, timeoutMs) {
+async function callGemini(model, image, mediaType, timeoutMs, cancel) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   let r;
   try {
     r = await fetch(url, {
       method: "POST",
-      signal: AbortSignal.timeout(Math.max(timeoutMs, 1000)),
+      signal: AbortSignal.any([cancel, AbortSignal.timeout(Math.max(timeoutMs, 1000))]),
       headers: { "Content-Type": "application/json", "x-goog-api-key": process.env.GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [
@@ -162,7 +178,7 @@ async function callGemini(model, image, mediaType, timeoutMs) {
       }),
     });
   } catch (err) {
-    return { ok: false, status: 0, detail: err.name === "TimeoutError" ? "timeout" : err.message };
+    return { ok: false, status: 0, detail: err.name === "TimeoutError" ? "timeout" : err.name === "AbortError" ? "cancelled" : err.message };
   }
 
   if (!r.ok) {
