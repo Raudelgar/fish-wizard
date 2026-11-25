@@ -15,7 +15,7 @@ const MAX_BASE64_CHARS = 6_000_000; // ~4.5 MB of image data (Vercel body limit 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["found", "english_name", "scientific_name", "common_name", "other_names", "confidence", "summary", "facts", "note"],
+  required: ["found", "english_name", "scientific_name", "common_name", "other_names", "confidence", "summary", "facts", "note", "expected_here"],
   properties: {
     found: { type: "boolean", description: "true if at least one fish is visible" },
     english_name: { type: "string", description: "Decide the species first: its English common name." },
@@ -38,6 +38,7 @@ const SCHEMA = {
       },
     },
     note: { type: "string", description: "Optional caveat (e.g. similar look-alike species), or empty string." },
+    expected_here: { type: "string", enum: ["yes", "no", "unknown"], description: "Does this species live wild near the given location? 'unknown' if no location was given." },
   },
 };
 
@@ -46,6 +47,17 @@ Identify the fish species shown. Decide the species first (english_name and scie
 Write "summary" in one or two short sentences. Give 3-5 "facts" (Appearance, Habitat, Behavior, Diet, and Size or Safety when relevant), each one short sentence, and tie a fact to what is visible in the photo when you can (e.g. "swimming in pairs, as in your photo").
 If you are not sure, give your best guess with confidence "low" and name likely look-alikes in "note".
 If no fish is visible, set found=false, leave the name fields empty, and explain briefly in "summary".`;
+
+// Optional place where the photo was taken: { name, lat?, lon? } from the photo's metadata or typed by the user.
+function locationInstruction(loc) {
+  if (!loc || typeof loc !== "object") return "\nNo location was given: set expected_here to \"unknown\".";
+  const name = typeof loc.name === "string" ? loc.name.replace(/[\r\n"]/g, " ").trim().slice(0, 120) : "";
+  const lat = Number(loc.lat), lon = Number(loc.lon);
+  const coords = Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180
+    ? ` (${lat.toFixed(3)}, ${lon.toFixed(3)})` : "";
+  if (!name && !coords) return "\nNo location was given: set expected_here to \"unknown\".";
+  return `\nThe user says the photo was taken at: "${name}"${coords}. Treat this only as a hint: it may be a dive site or beach, but also a fish market, shop or restaurant far from where the fish lives. When it is a natural site, favor species that live there if the markings fit; never let the location override what the photo shows. Set expected_here to "yes" if this species lives wild near that place, "no" if it does not, "unknown" if you cannot tell. You may mention the place in the summary when it adds something.`;
+}
 
 const LANG_RE = /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8}){0,3}$/;
 
@@ -71,7 +83,7 @@ export default async function handler(req, res) {
   }
 
   const { image, mediaType, lang } = req.body ?? {};
-  const prompt = PROMPT + languageInstruction(lang);
+  const prompt = PROMPT + languageInstruction(lang) + locationInstruction(req.body?.location);
   if (typeof image !== "string" || !image || !ALLOWED_TYPES.has(mediaType)) {
     return res.status(400).json({ error: "Send { image: <base64>, mediaType: 'image/jpeg' }" });
   }
